@@ -4,22 +4,19 @@
 #include <ArduinoJson.h>
 #include <Wire.h>
 #include <Adafruit_PCF8574.h>
+#include "secrets.h"
+
 
 // ==========================================
-// 1. CREDENCIALES
+// CREDENCIALES
 // ==========================================
-#define WIFI_SSID     "RedGuerreroLopez"
-#define WIFI_PASSWORD "guerrerolopez100824*"
 
-const char* TB_HOST  = "thingsboard.cloud";
-const int   TB_PORT  = 1883;
-const char* TB_TOKEN = "YBVuVxWcOFKIA80DH9d8";
 
 WiFiClient espClient;
 PubSubClient client(espClient);
 
 // ==========================================
-// 2. HARDWARE
+// HARDWARE
 // ==========================================
 Adafruit_PCF8574 pcf;      // 0x20
 Adafruit_PCF8574 pcf2;     // 0x21
@@ -28,7 +25,7 @@ bool hasPcf2 = false;
 // ===== Mapeo PCF 0x20 =====
 const int PIN_PCF_SW1_MERMAR   = 0; // P0
 const int PIN_PCF_SW2_CLEAR    = 1; // P1
-const int PIN_PCF_SW3_AUMENTAR = 2; // P2 (se usa en turbo como "SUBIR")
+const int PIN_PCF_SW3_AUMENTAR = 2; // P2 
 
 const int PIN_PCF_SW4_RAPIDO   = 3; // P3
 const int PIN_PCF_SW5_MEDIO    = 4; // P4
@@ -40,16 +37,17 @@ const int PIN_PCF_SW8_VACIAR   = 7; // P7
 // ===== Mapeo PCF 0x21 =====
 const int PIN_PCF2_SW9_PARAR   = 0; // P0
 
-// Para mantener tu lógica turbo sin reescribir mucho:
-const int PIN_PCF_BAJAR = PIN_PCF_SW1_MERMAR;    // antes SW1
-const int PIN_PCF_SUBIR = PIN_PCF_SW3_AUMENTAR;  // antes SW2, ahora SW3(AUMENTAR)
+// Alias usados por la lógica de control (subir/bajar) sobre el PCF 0x20
+const int PIN_PCF_BAJAR = PIN_PCF_SW1_MERMAR;    
+const int PIN_PCF_SUBIR = PIN_PCF_SW3_AUMENTAR;  
 
-// Pines Segmentos
+// Líneas de segmentos del display (8 señales leídas como entradas)
 const uint8_t PIN_SEG[] = {36, 23, 39, 22, 34, 21, 35, 19};
-// Selectores (estos mismos pines son tus SW físicos a leer)
+
+// Líneas de selección del multiplexado (D1/D2/D3). Estos GPIO también se usan para detectar SW4..SW9 por continuidad.
 const uint8_t SEL_D1[] = {5, 33, 17};
-const uint8_t SEL_D2[] = {25, 16, 26};  // SW4, SW5, SW6
-const uint8_t SEL_D3[] = {4, 27, 15};   // SW7, SW8, SW9
+const uint8_t SEL_D2[] = {25, 16, 26};  
+const uint8_t SEL_D3[] = {4, 27, 15};   
 
 
 
@@ -57,7 +55,7 @@ const uint8_t PIN_SW_COMUN = 32; // Cable 15 (Pin 40 PIC) -> GPIO32
 
 
 // ==========================================
-// 3. VARIABLES
+// VARIABLES
 // ==========================================
 volatile char textD1[4] = "   ";
 volatile char textD2[4] = "   ";
@@ -79,23 +77,20 @@ int lastD1 = -999;
 int lastD2 = -999;
 int lastD3 = -999;
 
-// ===== NUEVO: Bidireccional =====
+
 enum Velocidad : uint8_t { VEL_RAPIDO=0, VEL_MEDIO=1, VEL_LENTO=2 };
 enum Estado    : uint8_t { EST_START=0, EST_PARAR=1 };
 
 volatile Velocidad velocidad = VEL_MEDIO;
 volatile Estado estado = EST_PARAR;
 
-////////////////////////////////////21/01//////////////////////////
-// === NUEVO: reconexión no bloqueante (mínimo impacto) ===
 static uint32_t lastWiFiAttempt = 0;
 static uint32_t lastMQTTAttempt = 0;
-static const uint32_t WIFI_RETRY_MS = 3000;   // intenta WiFi cada 3s
-static const uint32_t MQTT_RETRY_MS = 2000;   // intenta MQTT cada 2s
-//////////////////////////////////////////////////////////////////
+static const uint32_t WIFI_RETRY_MS = 3000;   // Reintento periódico para no bloquear el loop
+static const uint32_t MQTT_RETRY_MS = 2000;   // Reintento periódico para mantener telemetría/RPC
 
 // ==========================================
-// 4. FUNCIONES SEGURIDAD Y UTILIDAD
+// FUNCIONES SEGURIDAD Y UTILIDAD
 // ==========================================
 void detenerMotor() {
   pcf.digitalWrite(PIN_PCF_BAJAR, LOW);
@@ -135,7 +130,7 @@ const char* estToStr(Estado e) {
 }
 
 // ==========================================
-// 5. INTERRUPCIONES (LECTURA DISPLAYS)
+// ISR de multiplexado: muestreo de segmentos para reconstruir D1/D2/D3
 // ==========================================
 char decodeBinaryToChar(uint8_t raw) {
   uint8_t cleanByte = raw & 0x7F;
@@ -147,16 +142,19 @@ char decodeBinaryToChar(uint8_t raw) {
   }
 }
 
+// ISR: se dispara por el flanco de los selectores del multiplexado.
+// Se muestrean los segmentos para reconstruir el dígito activo (mantener la rutina lo más corta posible).
 void IRAM_ATTR onSelectorChange() {
-  // D1
+  // D1: detectar qué selector está activo y muestrear segmentos
   for (int i=0; i<3; i++) {
     if (digitalRead(SEL_D1[i]) == LOW) {
+      // Espera breve para estabilizar señales tras el flanco del selector antes de leer los segmentos
       delayMicroseconds(50); uint8_t raw=0;
       for(int s=0;s<8;s++) if(digitalRead(PIN_SEG[s])==HIGH) raw|=(1<<s);
       textD1[i]=decodeBinaryToChar(raw); return;
     }
   }
-  // D2
+  // D2: detectar qué selector está activo y muestrear segmentos
   for (int i=0; i<3; i++) {
     if (digitalRead(SEL_D2[i]) == LOW) {
       delayMicroseconds(50); uint8_t raw=0;
@@ -164,7 +162,7 @@ void IRAM_ATTR onSelectorChange() {
       textD2[i]=decodeBinaryToChar(raw); return;
     }
   }
-  // D3
+  // D3: detectar qué selector está activo y muestrear segmentos
   for (int i=0; i<3; i++) {
     if (digitalRead(SEL_D3[i]) == LOW) {
       delayMicroseconds(50); uint8_t raw=0;
@@ -175,7 +173,7 @@ void IRAM_ATTR onSelectorChange() {
 }
 
 // ==========================================
-// 6. TELEMETRÍA
+// TELEMETRÍA
 // ==========================================
 void sendTelemetry() {
   StaticJsonDocument<420> doc;
@@ -192,7 +190,6 @@ void sendTelemetry() {
   doc["valor"] = valor_preview;
   doc["valor_cargado"] = valor_objetivo;
 
-  // NUEVO
   doc["velocidad"] = velToStr(velocidad);
   doc["estado"]    = estToStr(estado);
 
@@ -210,7 +207,7 @@ void sendEventKV(const char* k, const char* v) {
 }
 
 // ==========================================
-// 7. PULSOS NO BLOQUEANTES POR PCF (NUEVO)
+// PULSOS NO BLOQUEANTES POR PCF 
 // ==========================================
 struct PulseJob {
   Adafruit_PCF8574* dev = nullptr;
@@ -233,7 +230,7 @@ void cancelPulse(Adafruit_PCF8574* dev, uint8_t pin) {
 bool schedulePulse(Adafruit_PCF8574* dev, uint8_t pin, uint32_t ms) {
   if (!dev) return false;
 
-  // Reutiliza si ya existe
+  // Si ya hay un pulso activo en ese pin, se extiende el tiempo de apagado
   for (auto &j : jobs) {
     if (j.active && j.dev == dev && j.pin == pin) {
       j.offAt = millis() + ms;
@@ -241,7 +238,7 @@ bool schedulePulse(Adafruit_PCF8574* dev, uint8_t pin, uint32_t ms) {
       return true;
     }
   }
-  // Nuevo job
+
   for (auto &j : jobs) {
     if (!j.active) {
       j.dev = dev;
@@ -269,7 +266,7 @@ static const uint32_t PULSE_MS = 140;
 static const uint32_t HOLD_VACIAR_MS_MIN = 1000;
 
 // ==========================================
-// 8. SETTERS BIDIRECCIONALES (NUEVO)
+// SETTERS BIDIRECCIONALES 
 // ==========================================
 Velocidad strToVel(String s) {
   s.toUpperCase(); s.replace("\"", "");
@@ -290,7 +287,7 @@ void setVelocidadLocal(Velocidad v, bool actuatePCF) {
   velocidad = v;
 
   if (actuatePCF) {
-    // Pulso en el botón real correspondiente (PCF 0x20)
+    // Emula pulsación en el canal del PCF asociado a la velocidad seleccionada
     if (v == VEL_RAPIDO) schedulePulse(&pcf, PIN_PCF_SW4_RAPIDO, PULSE_MS);
     if (v == VEL_MEDIO)  schedulePulse(&pcf, PIN_PCF_SW5_MEDIO,  PULSE_MS);
     if (v == VEL_LENTO)  schedulePulse(&pcf, PIN_PCF_SW6_LENTO,  PULSE_MS);
@@ -326,10 +323,11 @@ void doClear(uint32_t ms) {
 }
 
 // ==========================================
-// 9. LECTURA DE SW FÍSICOS (FIX REAL)
-//    Detecta cuando el pin del SW queda "unido" al común (GPIO32).
+// LECTURA DE SW FÍSICOS
 // ==========================================
-static const uint32_t DETECT_MS = 25; // 20..60ms (ajustable)
+
+// Anti-rebote por “igualdad” pin<->común. 25 ms para pulsadores mecánicos típicos.
+static const uint32_t DETECT_MS = 25; 
 
 struct LinkDetector {
   uint8_t pin;
@@ -349,7 +347,8 @@ void updateLinkDetector(LinkDetector &d, void (*onPress)()) {
   int a = digitalRead(d.pin);
   int b = digitalRead(PIN_SW_COMUN);
 
-  // Si están iguales, probablemente el switch está cerrando el circuito (pin <-> común)
+  // Detección por continuidad: cuando el switch cierra, el pin queda eléctricamente unido al común.
+  // Si ambos niveles coinciden por DETECT_MS, se considera pulsación (anti-rebote).
   if (a == b) {
     if (d.sameSince == 0) d.sameSince = millis();
     if (!d.latched && (millis() - d.sameSince) >= DETECT_MS) {
@@ -366,15 +365,13 @@ void updateLinkDetector(LinkDetector &d, void (*onPress)()) {
 void onPressSW4() { setVelocidadLocal(VEL_RAPIDO, false); }
 void onPressSW5() { setVelocidadLocal(VEL_MEDIO,  false); }
 void onPressSW6() { setVelocidadLocal(VEL_LENTO,  false); }
-
 void onPressSW7() { setEstadoLocal(EST_START, false); }
 void onPressSW9() { setEstadoLocal(EST_PARAR, false); }
-
 void onPressSW8() { sendEventKV("accion", "VACIAR_FISICO"); }
 
 
 // ==========================================
-// 10. RPC HANDLER (EXTENDIDO)
+// RPC ThingsBoard: control remoto de paso/valor/velocidad/estado y acciones (vaciar/clear)
 // ==========================================
 bool parseStringParam(JsonVariant params, String &out) {
   out = "";
@@ -411,7 +408,6 @@ void handleRpc(const char* topic, const byte* payload, unsigned int length) {
     const char* method = doc["method"] | "";
     JsonVariant params = doc["params"];
 
-    // ===== TUS RPC EXISTENTES =====
     if (strcmp(method, "setStep") == 0) {
       int s = params["step"];
       if (s==1||s==10||s==100) paso = s;
@@ -431,23 +427,23 @@ void handleRpc(const char* topic, const byte* payload, unsigned int length) {
       update = true;
     }
 
-    // ===== NUEVO: método = "velocidad" (o "setVelocidad") =====
+    // RPC: velocidad (acepta "velocidad" o "setVelocidad")
     else if (strcmp(method, "velocidad") == 0 || strcmp(method, "setVelocidad") == 0) {
       String s;
       if (!parseStringParam(params, s)) ok = false;
-      else setVelocidadLocal(strToVel(s), true); // actuate PCF
+      else setVelocidadLocal(strToVel(s), true); 
     }
 
-    // ===== NUEVO: método = "estado" (o "setEstado") =====
+    // RPC: estado (acepta "estado" o "setEstado")
     else if (strcmp(method, "estado") == 0 || strcmp(method, "setEstado") == 0) {
       String s;
       if (!parseStringParam(params, s)) ok = false;
-      else setEstadoLocal(strToEst(s), true); // actuate PCF
+      else setEstadoLocal(strToEst(s), true); 
     }
 
     else if (strcmp(method, "vaciar") == 0) {
       if (estado != EST_PARAR) {
-        // NO se ejecuta, NO se agenda nada, NO se guarda nada
+        // Seguridad: "vaciar" solo se acepta si el estado actual es PARAR
         ok = false;
       } else {
         uint32_t ms = parseUintParam(params, HOLD_VACIAR_MS_MIN);
@@ -456,7 +452,8 @@ void handleRpc(const char* topic, const byte* payload, unsigned int length) {
     }
 
 
-    // ===== NUEVO: método = "clear" (SW2) =====
+    // RPC: clear (SW2)
+
     else if (strcmp(method, "clear") == 0 || strcmp(method, "sw2") == 0) {
       uint32_t ms = parseUintParam(params, 180);
       doClear(ms);
@@ -467,10 +464,10 @@ void handleRpc(const char* topic, const byte* payload, unsigned int length) {
     }
   }
 
-  // Respuesta rápida
+  // Respuesta al RPC (true/false)
   client.publish(("v1/devices/me/rpc/response/" + reqId).c_str(), ok ? "true" : "false");
 
-  // Si fue un update del grupo original
+  // Publica telemetría cuando solo se actualizan variables locales (paso/inc/dec/load)
   if (update) sendTelemetry();
 }
 
@@ -478,6 +475,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   handleRpc(topic, payload, length);
 }
 
+// Conexión inicial (bloqueante). Usar en setup; en loop se usa maintainConnection().
 void ensureWiFi() {
   if (WiFi.status() == WL_CONNECTED) return;
   WiFi.mode(WIFI_STA); WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
@@ -485,7 +483,7 @@ void ensureWiFi() {
 }
 
 
-////////////////////////////////////21/01//////////////////////////
+// Conexión inicial MQTT (bloqueante). En ejecución normal se evita bloquear el loop.
 void ensureMQTT() {
   while (!client.connected()) {
     if (client.connect("ESP32_Final_Turbo", TB_TOKEN, NULL)) {
@@ -495,27 +493,25 @@ void ensureMQTT() {
   }
 }
 
-// === NUEVO: mantiene WiFi/MQTT sin bloquear el loop ===
+// Mantiene conectividad WiFi/MQTT con reintentos periódicos (sin bucles bloqueantes)
 void maintainConnection() {
   uint32_t now = millis();
 
-  // 1) WiFi: si no está conectado, intenta reconectar cada WIFI_RETRY_MS (sin while)
+  // WiFi: reintentos cada WIFI_RETRY_MS (sin bucles bloqueantes)
   if (WiFi.status() != WL_CONNECTED) {
     if ((int32_t)(now - lastWiFiAttempt) >= (int32_t)WIFI_RETRY_MS) {
       lastWiFiAttempt = now;
 
       WiFi.mode(WIFI_STA);
       WiFi.setAutoReconnect(true);
-      WiFi.setSleep(false);        // reduce latencia / mejora estabilidad en muchos casos
-
-      // fuerza nuevo intento sin borrar credenciales
+      WiFi.setSleep(false);        
       WiFi.disconnect(false);
       WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     }
-    return; // sin WiFi no intentes MQTT
+    return; 
   }
 
-  // 2) MQTT: si WiFi está OK pero MQTT no, intenta reconectar cada MQTT_RETRY_MS (sin while)
+  // MQTT: reintentos cada MQTT_RETRY_MS cuando WiFi ya está OK
   if (!client.connected()) {
     if ((int32_t)(now - lastMQTTAttempt) >= (int32_t)MQTT_RETRY_MS) {
       lastMQTTAttempt = now;
@@ -527,11 +523,11 @@ void maintainConnection() {
     }
   }
 }
-//////////////////////////////////////////////////////////////
+
 
 
 // ==========================================
-// 11. SETUP
+// SETUP
 // ==========================================
 void setup() {
   Serial.begin(115200);
@@ -555,7 +551,7 @@ void setup() {
   pinMode(PIN_SW_COMUN, INPUT);
 
 
-  // Dejar todo en LOW por seguridad
+  // Estado seguro al arranque: salidas del PCF en LOW para evitar activaciones involuntarias
   detenerMotor();
   pcf.digitalWrite(PIN_PCF_SW2_CLEAR, LOW);
   pcf.digitalWrite(PIN_PCF_SW4_RAPIDO, LOW);
@@ -573,13 +569,9 @@ void setup() {
     pinMode(SEL_D3[i], INPUT); attachInterrupt(digitalPinToInterrupt(SEL_D3[i]), onSelectorChange, FALLING);
   }
 
-  ////////////////////////////////////21/01//////////////////////////
   WiFi.setAutoReconnect(true);
   WiFi.setSleep(false);
-  ////////////////////////////////////////////////////////////////////////
-
-
-
+  
   ensureWiFi();
   client.setServer(TB_HOST, TB_PORT);
   client.setCallback(mqttCallback);
@@ -598,17 +590,17 @@ void setup() {
 }
 
 // ==========================================
-// 12. LOOP
+// LOOP
 // ==========================================
 void loop() {
-  // 1. RED (no bloqueante)
+  // Red: mantener WiFi/MQTT y procesar callbacks
   maintainConnection();
   if (client.connected()) client.loop();
 
-  // 2. Pulsos PCF (nuevo)
+  // Pulsos temporizados: emulación de pulsaciones sobre el PCF
   updatePulses();
 
-  // 3. Leer SW físicos (nuevo)
+  // SW físicos: detección por continuidad con anti-rebote
   updateLinkDetector(detSW4, onPressSW4);
   updateLinkDetector(detSW5, onPressSW5);
   updateLinkDetector(detSW6, onPressSW6);
@@ -616,8 +608,7 @@ void loop() {
   updateLinkDetector(detSW8, onPressSW8);
   updateLinkDetector(detSW9, onPressSW9);
 
-
-  // 4. TELEMETRÍA Y SYNC (Cada 150ms) - tu lógica intacta
+  // Telemetría: publica cambios de D1/D2/D3 y sincroniza preview/objetivo (cada ~150 ms)
   if (millis() - ultimaTelemetria > 150) {
     int curD1 = bufferToInt(textD1);
     int curD2 = bufferToInt(textD2);
@@ -636,7 +627,7 @@ void loop() {
     ultimaTelemetria = millis();
   }
 
-  // 5. MOTOR Y CONTROL TURBO (idéntico a tu código)
+  // Control de motor: búsqueda de valor_objetivo con modo turbo y ajuste fino por pulsos
   if (buscando) {
     int actual = bufferToInt(textD1);
     if (actual == -1) return;
