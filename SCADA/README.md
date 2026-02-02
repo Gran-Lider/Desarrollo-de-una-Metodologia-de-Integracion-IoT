@@ -60,5 +60,14 @@ Para desplegar la aplicación en la computadora final (sin necesidad de instalar
 
 ```bash
 pyinstaller --noconsole --onefile --clean --icon="icono2-app.ico" --name="Máquina Dosificadora IoT" main.py
+```
+
+## 🧳 Portable
+
+La salida del código anterior es un archivo con extensión **(.exe)** que se puede llevar en una memoria USB y ejecutarlo desde cualquier ordenador que cumpla con los requisitos antes expuestos.
+
+### Vista del ejecutable
+
+![Uploading image.png…]()
 
 
