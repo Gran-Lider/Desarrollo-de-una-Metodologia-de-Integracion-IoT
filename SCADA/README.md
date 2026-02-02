@@ -23,8 +23,8 @@ Si deseas ejecutar el código fuente directamente o realizar modificaciones:
 
 1.  **Clonar el repositorio:**
     ```bash
-    git clone [https://github.com/TU_USUARIO/nombre-repo.git](https://github.com/TU_USUARIO/nombre-repo.git)
-    cd nombre-repo
+    git clone https://github.com/Gran-Lider/Desarrollo-de-una-Metodologia-de-Integracion-IoT.git
+    cd Desarrollo-de-una-Metodologia-de-Integracion-IoT/SCADA
     ```
 
 2.  **Crear un entorno virtual (Opcional pero recomendado):**
@@ -35,7 +35,7 @@ Si deseas ejecutar el código fuente directamente o realizar modificaciones:
 
 3.  **Instalar dependencias:**
     ```bash
-    pip install PyQt6 PyQt6-WebEngine pyinstaller
+    pip install -r requirements.txt
     ```
 
 4.  **Ejecutar la aplicación:**
@@ -48,4 +48,5 @@ Si deseas ejecutar el código fuente directamente o realizar modificaciones:
 Para desplegar la aplicación en la computadora final (sin necesidad de instalar Python), se utiliza **PyInstaller**. Ejecuta el siguiente comando en la terminal:
 
 ```bash
-pyinstaller --noconsole --onefile --clean --name="SupervisorDosificadora" main.py
+pyinstaller --noconsole --onefile --clean --icon="icono2-app.ico" --name="Máquina Dosificadora IoT" main.py
+
