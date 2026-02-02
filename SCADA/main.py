@@ -1,8 +1,11 @@
+# Librerias necesarias #######################################################
+
 import sys
 from PyQt6.QtCore import QUrl
 from PyQt6.QtWidgets import QApplication, QMainWindow
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebEngineCore import QWebEngineProfile, QWebEnginePage
+##############################################################################
 
 class VisorTesis(QMainWindow):
     def __init__(self):
@@ -18,13 +21,10 @@ class VisorTesis(QMainWindow):
         self.perfil.setPersistentCookiesPolicy(QWebEngineProfile.PersistentCookiesPolicy.ForcePersistentCookies)
         pagina_web = QWebEnginePage(self.perfil, self.browser)
         self.browser.setPage(pagina_web)
-
-        # --- CONEXIÓN DEL TRUCO ---
-        # Cuando la página diga "Ya cargué", ejecutamos nuestra función
+        
+        # Cuando la página ya cargue se ejecuta la función
         self.browser.loadFinished.connect(self.inyectar_trucos_visuales)
 
-        # --- TU ENLACE ---
-        # Pon aquí tu enlace (asegúrate de que sea el correcto)
         mi_url = "https://thingsboard.cloud/dashboards/all/e1a77d10-e83b-11f0-a6fc-1dffa956f056"
         
         self.browser.setUrl(QUrl(mi_url))
@@ -77,7 +77,7 @@ class VisorTesis(QMainWindow):
                     }
                 });
                 
-            }, 2000); // <-- Espera 3 segundos. Si tu PC es lenta, sube esto a 5000
+            }, 2000); // <-- Espera 3 segundos. Si la PC es lenta subir a 5000
             """
             self.browser.page().runJavaScript(script_limpieza)
 
@@ -85,4 +85,5 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = VisorTesis()
     window.showMaximized()
+
     sys.exit(app.exec())
