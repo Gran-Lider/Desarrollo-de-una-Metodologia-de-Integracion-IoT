@@ -68,6 +68,7 @@ La salida del código anterior es un archivo con extensión **(.exe)** que se pu
 
 ### Vista del ejecutable
 
-![Uploading image.png…]()
+<img width="252" height="260" alt="image" src="https://github.com/user-attachments/assets/23fc9f41-0cce-49ec-9b81-09732ced51f9" />
+
 
 
