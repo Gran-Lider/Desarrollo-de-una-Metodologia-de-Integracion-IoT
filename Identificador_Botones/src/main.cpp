@@ -265,6 +265,13 @@ void updatePulses() {
 static const uint32_t PULSE_MS = 140;
 static const uint32_t HOLD_VACIAR_MS_MIN = 1000;
 
+// Vaciar completo: mantiene VACIAR presionado y luego ejecuta PARAR
+static const uint32_t VACIAR_COMPLETO_MS = 10000;
+static bool vaciarCompletoActivo = false;
+static uint32_t vaciarCompletoStopAt = 0;
+
+
+
 // ==========================================
 // SETTERS BIDIRECCIONALES 
 // ==========================================
@@ -315,6 +322,25 @@ void doVaciar(uint32_t holdMs, bool actuatePCF) {
   if (actuatePCF) schedulePulse(&pcf, PIN_PCF_SW8_VACIAR, holdMs);
   sendEventKV("accion", "VACIAR");
 }
+
+void doVaciarCompleto(bool actuatePCF) {
+  if (estado != EST_PARAR) {
+    // Seguridad: solo se permite iniciar el ciclo si está en PARAR
+    sendEventKV("accion", "VACIAR_COMPLETO_RECHAZADO");
+    return;
+  }
+
+  // Mantener VACIAR presionado 10s
+  if (actuatePCF) schedulePulse(&pcf, PIN_PCF_SW8_VACIAR, VACIAR_COMPLETO_MS);
+
+  // Programar STOP automático cuando termine el hold
+  vaciarCompletoActivo = true;
+  vaciarCompletoStopAt = millis() + VACIAR_COMPLETO_MS;
+
+  sendEventKV("accion", "VACIAR_COMPLETO_INICIADO");
+}
+
+
 
 void doClear(uint32_t ms) {
   if (ms < 40) ms = 40;
@@ -450,6 +476,11 @@ void handleRpc(const char* topic, const byte* payload, unsigned int length) {
         doVaciar(ms, true);
       }
     }
+
+    else if (strcmp(method, "vaciar_completo") == 0 || strcmp(method, "vaciarCompleto") == 0) {
+      doVaciarCompleto(true);
+    }
+
 
 
     // RPC: clear (SW2)
@@ -599,6 +630,14 @@ void loop() {
 
   // Pulsos temporizados: emulación de pulsaciones sobre el PCF
   updatePulses();
+
+    // Vaciar completo: al cumplirse el tiempo, ejecutar STOP automáticamente
+  if (vaciarCompletoActivo && (int32_t)(millis() - vaciarCompletoStopAt) >= 0) {
+    vaciarCompletoActivo = false;
+    setEstadoLocal(EST_PARAR, true);  // emula STOP en PCF2 si existe
+    sendEventKV("accion", "VACIAR_COMPLETO_STOP");
+  }
+
 
   // SW físicos: detección por continuidad con anti-rebote
   updateLinkDetector(detSW4, onPressSW4);
