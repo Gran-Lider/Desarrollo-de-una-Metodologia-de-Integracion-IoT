@@ -25,6 +25,7 @@ class VisorTesis(QMainWindow):
         # Cuando la página ya cargue se ejecuta la función
         self.browser.loadFinished.connect(self.inyectar_trucos_visuales)
 
+        # dirección URL de la página de Thingsboard
         mi_url = "https://thingsboard.cloud/dashboards/all/e1a77d10-e83b-11f0-a6fc-1dffa956f056"
         
         self.browser.setUrl(QUrl(mi_url))
@@ -87,3 +88,4 @@ if __name__ == "__main__":
     window.showMaximized()
 
     sys.exit(app.exec())
+
