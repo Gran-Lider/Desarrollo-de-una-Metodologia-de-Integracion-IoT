@@ -1,21 +1,30 @@
-# Sistema de Supervisión HMI - Máquina Dosificadora
+# SCADA / HMI – Aplicación ejecutable (.exe) complementaria
 
-Este repositorio contiene el código fuente de la interfaz de supervisión de escritorio (HMI) desarrollada como parte del proyecto de tesis: **"Diseño y construcción de una máquina dosificadora controlada vía IoT"**.
+Como parte **complementaria** de este trabajo, se ha desarrollado una **aplicación ejecutable (.exe)** para la pantalla **HMI** con el objetivo de **tener un acceso más rápido a la plataforma** y **mejorar la interacción con el usuario**.
 
-La aplicación actúa como un contenedor nativo (wrapper) para visualizar el dashboard de **ThingsBoard**, proporcionando un entorno libre de distracciones (Modo Kiosco) y optimizado para la operación en planta.
+Para ello, se utilizó el lenguaje de programación **Python** y el framework **Qt** a través de la librería **PyQt6**. Esta solución integra un motor de navegación web **Chromium** mediante el módulo **QWebEngine**, lo que permite **incrustar contenido web** dentro de aplicaciones Qt para su visualización en una ventana dedicada en la HMI.
 
-## 📋 Características
+---
 
-* **Entorno Standalone:** Ejecuta el panel de control como una aplicación de escritorio independiente, sin barras de navegación de navegador web ni distracciones.
-* **Modo Kiosco Forzado:** Implementa algoritmos de inyección de JavaScript para ocultar automáticamente las barras laterales y cabeceras nativas de ThingsBoard, maximizando el área de visualización.
-* **Gestión de Sesiones Persistente:** Almacena cookies y tokens de autenticación localmente, permitiendo que el operador inicie sesión una única vez.
-* **Renderizado Chromium:** Utiliza el motor `QtWebEngine` (basado en Chromium) para asegurar compatibilidad total con los gráficos modernos de ThingsBoard.
+## 📁 Contenido de la carpeta
 
-## 🛠️ Requisitos del Sistema
+- `main.py`: código fuente principal del launcher HMI.
+- `requirements.txt`: dependencias del proyecto.
+- `icono2-app.ico`: ícono de la aplicación (opcional).
+- `.gitignore`: exclusiones para evitar subir artefactos generados (ej. `dist/`, `build/`).
+- `README.md`: documentación de ejecución y generación del ejecutable.
 
-* **Sistema Operativo:** Windows 10/11 (x64).
-* **Lenguaje:** Python 3.10 o superior.
-* **Librerías:** PyQt6.
+> **Nota:** no se recomienda versionar las carpetas `dist/` y `build/` porque se generan automáticamente al compilar con PyInstaller.
+
+---
+
+## ✅ Requisitos
+
+- **Sistema Operativo:** Windows 10/11 (x64)
+- **Python:** 3.10 o superior
+- **Dependencias principales:** `PyQt6` y `PyQt6-WebEngine` (QWebEngine / Chromium)
+
+---
 
 ## 🚀 Instalación y Ejecución (Entorno de Desarrollo)
 
@@ -43,10 +52,13 @@ Si deseas ejecutar el código fuente directamente o realizar modificaciones:
     python main.py
     ```
 
+---
+
 ## 📦 Generación del Ejecutable (.exe)
 
-Para desplegar la aplicación en la computadora final (sin necesidad de instalar Python), se utiliza **PyInstaller**. Ejecuta el siguiente comando en la terminal:
+Para desplegar la aplicación en la computadora final (sin necesidad de instalar Python), se utiliza **PyInstaller**. Ejecuta el siguiente comando en la terminal **desde la carpeta `SCADA/`**:
 
 ```bash
 pyinstaller --noconsole --onefile --clean --icon="icono2-app.ico" --name="Máquina Dosificadora IoT" main.py
+
 
